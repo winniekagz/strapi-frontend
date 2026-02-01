@@ -1,34 +1,42 @@
 // src/app/page.tsx
 /* eslint-disable @next/next/no-img-element */
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { getAllPosts } from "../lib/api";
 import { BlogPost } from "@/lib/types";
 import Loader from "@/components/Loading";
 import Pagination from "@/components/Pagination";
+import VoteButtons from "@/components/VoteButtons";
 
 export default function Home() {
+  return (
+    <Suspense>
+      <HomeContent />
+    </Suspense>
+  );
+}
+
+function HomeContent() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [totalPages, setTotalPages] = useState(1); // Track total number of pages
+  const [totalPages, setTotalPages] = useState(1);
 
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  // Get the search query and page from the URL params
   const searchQuery = searchParams.get("search") ?? "";
   const pageParam = searchParams.get("page");
-  const currentPage = pageParam ? parseInt(pageParam) : 1; // Default to page 1 if not present
+  const currentPage = pageParam ? parseInt(pageParam) : 1;
 
   useEffect(() => {
     const fetchPosts = async (page: number) => {
       try {
         const { posts, pagination } = await getAllPosts(page, searchQuery);
         setPosts(posts);
-        setTotalPages(pagination.pageCount); // Set total pages
+        setTotalPages(pagination.pageCount);
       } catch (error) {
         setError("Error fetching posts.");
         console.error("Error fetching posts:", error);
@@ -38,14 +46,13 @@ export default function Home() {
     };
 
     fetchPosts(currentPage);
-  }, [currentPage, searchQuery]); // Re-fetch when page or search query changes
+  }, [currentPage, searchQuery]);
 
   const handlePageChange = (newPage: number) => {
-    // Update the page parameter in the URL
     const newParams = new URLSearchParams(searchParams.toString());
     newParams.set("page", newPage.toString());
     router.push(`?${newParams.toString()}`);
-    setLoading(true); // Show loader while fetching
+    setLoading(true);
   };
 
   return (
@@ -83,9 +90,12 @@ export default function Home() {
                       <p className="text-gray-400 mt-2 text-sm leading-6 line-clamp-3">
                         {post.description}
                       </p>
-                      <p className="text-purple-400 text-sm mt-4 inline-block font-medium hover:underline">
-                        Read More
-                      </p>
+                      <div className="flex items-center justify-between mt-4">
+                        <p className="text-purple-400 text-sm inline-block font-medium hover:underline">
+                          Read More
+                        </p>
+                        <VoteButtons blogId={post.id} />
+                      </div>
                     </div>
                   </Link>
                 </div>
@@ -95,11 +105,10 @@ export default function Home() {
             )}
           </div>
 
-          {/* Pagination Controls */}
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
-            onPageChange={handlePageChange} // Update page when pagination changes
+            onPageChange={handlePageChange}
           />
         </>
       )}

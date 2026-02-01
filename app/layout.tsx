@@ -1,8 +1,9 @@
 // app/layout.tsx
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import Navbar from "@/components/Navbar";
-import localFont from "next/font/local";
 import { Toaster } from "react-hot-toast";
+import { AuthProvider } from "@/context/AuthContext";
 import "./globals.css";
 import { Inter } from "next/font/google"
 
@@ -27,9 +28,13 @@ export default function RootLayout({
       <body
         className={`${inter.variable}  antialiased`}
       >
-        <Navbar />
-        {children}
-        <Toaster />
+        <AuthProvider>
+          <Suspense>
+            <Navbar />
+          </Suspense>
+          {children}
+          <Toaster />
+        </AuthProvider>
       </body>
     </html>
   );

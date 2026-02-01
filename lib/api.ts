@@ -1,6 +1,6 @@
 // lib/api.ts
 import axios, { AxiosInstance } from "axios";
-import { UserBlogPostData, BlogPost } from "./types";
+import { UserBlogPostData, BlogPost, Comment, Vote } from "./types";
 
 export const api: AxiosInstance = axios.create({
   baseURL: `${process.env.NEXT_PUBLIC_STRAPI_URL}`,
@@ -78,8 +78,80 @@ export const getAllCategories = async () => {
   }
 };
 
+// Comments
+export const getCommentsByBlog = async (blogId: number): Promise<Comment[]> => {
+  try {
+    const response = await api.get(
+      `api/comments?filters[blog][id][$eq]=${blogId}&filters[isApproved][$eq]=true&populate=user&sort=createdAt:desc`
+    );
+    return response.data.data || [];
+  } catch (error) {
+    console.error("Error fetching comments:", error);
+    return [];
+  }
+};
+
+export const postComment = async (blogId: number, content: string, token: string) => {
+  const response = await api.post(
+    "api/comments",
+    { data: { content, blog: blogId } },
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return response.data.data;
+};
+
+// Votes
+export const getVotesByBlog = async (blogId: number): Promise<Vote[]> => {
+  try {
+    const response = await api.get(
+      `api/votes?filters[blog][id][$eq]=${blogId}`
+    );
+    return response.data.data || [];
+  } catch (error) {
+    console.error("Error fetching votes:", error);
+    return [];
+  }
+};
+
+export const getUserVote = async (blogId: number, userId: number, token: string) => {
+  try {
+    const response = await api.get(
+      `api/votes?filters[blog][id][$eq]=${blogId}&filters[user][id][$eq]=${userId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const votes = response.data.data;
+    return votes && votes.length > 0 ? { id: votes[0].id, value: votes[0].value } : null;
+  } catch {
+    return null;
+  }
+};
+
+export const castVote = async (blogId: number, value: 1 | -1, token: string) => {
+  const response = await api.post(
+    "api/votes",
+    { data: { blog: blogId, value } },
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return response.data.data;
+};
+
+export const updateVote = async (voteId: number, value: 1 | -1, token: string) => {
+  const response = await api.put(
+    `api/votes/${voteId}`,
+    { data: { value } },
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return response.data.data;
+};
+
+export const deleteVote = async (voteId: number, token: string) => {
+  await api.delete(`api/votes/${voteId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+};
+
 // Upload image with correct structure for referencing in the blog
-export const uploadImage = async (image: File, refId: number) => {
+export const uploadImage = async (image: File, refId: number, token?: string) => {
   try {
     const formData = new FormData();
     formData.append("files", image);
@@ -87,7 +159,9 @@ export const uploadImage = async (image: File, refId: number) => {
     formData.append("refId", refId.toString());
     formData.append("field", "cover"); 
 
-    const response = await api.post("api/upload", formData); 
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const response = await api.post("api/upload", formData, { headers });
     const uploadedImage = response.data[0];
     return uploadedImage; 
   } catch (err) {
@@ -97,10 +171,12 @@ export const uploadImage = async (image: File, refId: number) => {
 };
 
 // Create a blog post and handle all fields
-export const createPost = async (postData: UserBlogPostData) => {
+export const createPost = async (postData: UserBlogPostData, token?: string) => {
   try {
-    const reqData = { data: { ...postData } }; // Strapi required format to post data
-    const response = await api.post("api/blogs", reqData);
+    const reqData = { data: { ...postData } };
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const response = await api.post("api/blogs", reqData, { headers });
     return response.data.data;
   } catch (error) {
     console.error("Error creating post:", error);

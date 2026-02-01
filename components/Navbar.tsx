@@ -4,22 +4,30 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { FaPen, FaSearch, FaTimes } from "react-icons/fa";
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 
 const Navbar = () => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchParams = useSearchParams();
-  const pathname = usePathname(); // Get the current route path
-  const { replace } = useRouter(); // Next js function to replace routes
+  const pathname = usePathname();
+  const { replace } = useRouter();
+  const { user, logout, loading } = useAuth();
 
-  // Handle search query submission
+  const isEditor =
+    user?.role?.type === "editor" || user?.role?.type === "admin";
+
   const handleSearchSubmit = () => {
     const params = new URLSearchParams(searchParams);
     if (searchQuery) params.set("search", searchQuery);
     else params.delete("search");
-    // Always routes with the search query
     replace(`/?${params.toString()}`);
-    setSearchOpen(false); // Close search bar after submission
+    setSearchOpen(false);
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    replace("/");
   };
 
   return (
@@ -38,7 +46,6 @@ const Navbar = () => {
             {searchOpen ? <FaTimes /> : <FaSearch />}
           </button>
 
-          {/* Search Box (toggles visibility) */}
           {searchOpen && (
             <div className="ml-4 flex items-center gap-2">
               <input
@@ -69,17 +76,48 @@ const Navbar = () => {
           >
             <Link href="/">Blogs</Link>
           </li>
-          <li
-            className={
-              pathname === "/write"
-                ? "text-purple-400"
-                : "text-white hover:text-purple-400"
-            }
-          >
-            <Link href="/write">
-              <FaPen className="hover:text-purple-400" />
-            </Link>
-          </li>
+
+          {isEditor && (
+            <li
+              className={
+                pathname === "/write"
+                  ? "text-purple-400"
+                  : "text-white hover:text-purple-400"
+              }
+            >
+              <Link href="/write">
+                <FaPen className="hover:text-purple-400" />
+              </Link>
+            </li>
+          )}
+
+          {!loading && (
+            <>
+              {user ? (
+                <>
+                  <li className="text-gray-300 text-sm">{user.username}</li>
+                  <li>
+                    <button
+                      onClick={handleLogout}
+                      className="text-white hover:text-purple-400 text-sm"
+                    >
+                      Logout
+                    </button>
+                  </li>
+                </>
+              ) : (
+                <li
+                  className={
+                    pathname === "/login"
+                      ? "text-purple-400"
+                      : "text-white hover:text-purple-400"
+                  }
+                >
+                  <Link href="/login">Login</Link>
+                </li>
+              )}
+            </>
+          )}
         </ul>
       </nav>
     </div>

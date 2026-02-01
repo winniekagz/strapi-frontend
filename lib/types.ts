@@ -47,3 +47,31 @@ export interface BlogPostResponse {
 export interface SingleBlogPostResponse {
   data: BlogPost; // The single blog post object
 }
+
+export interface Comment {
+  id: number;
+  content: string;
+  blog: BlogPost;
+  user: User;
+  isApproved: boolean;
+  createdAt: string;
+}
+
+export interface Vote {
+  id: number;
+  blog: BlogPost;
+  user: User;
+  value: 1 | -1;
+}
+
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+  role: { name: string; type: string };
+}
+
+export interface AuthResponse {
+  jwt: string;
+  user: User;
+}

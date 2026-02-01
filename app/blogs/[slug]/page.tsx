@@ -1,7 +1,7 @@
-// app/blogs/[slug]/page.tsx.
+// app/blogs/[slug]/page.tsx
 "use client";
-import { useEffect, useState } from "react";
-import { getPostBySlug } from "../../../lib/api"; // Import your API function
+import { useEffect, useState, use } from "react";
+import { getPostBySlug } from "../../../lib/api";
 import { useRouter } from "next/navigation";
 import { BlogPost } from "@/lib/types";
 import Markdown from "react-markdown";
@@ -9,23 +9,24 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { dracula } from "react-syntax-highlighter/dist/cjs/styles/prism";
-import { FaClipboard } from "react-icons/fa"; // Import your chosen icon
+import { FaClipboard } from "react-icons/fa";
 import Loader from "@/components/Loading";
 import moment from "moment";
 import { toast } from "react-hot-toast";
-
+import Comments from "@/components/Comments";
+import VoteButtons from "@/components/VoteButtons";
 
 const handleCopyCode = async (code: string) => {
   try {
     await navigator.clipboard.writeText(code);
-    toast.success("Code copied to clipboard!"); // Show toast on error
+    toast.success("Code copied to clipboard!");
   } catch (err) {
     console.error("Failed to copy code: ", err);
   }
 };
 
-const BlogPostPage = ({ params }: { params: { slug: string } }) => {
-  const { slug } = params;
+const BlogPostPage = ({ params }: { params: Promise<{ slug: string }> }) => {
+  const { slug } = use(params);
   const [post, setPost] = useState<BlogPost | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,12 +36,10 @@ const BlogPostPage = ({ params }: { params: { slug: string } }) => {
     const fetchPost = async () => {
       if (slug) {
         try {
-          // Fetch the post using the slug
           const fetchedPost = await getPostBySlug(slug);
           setPost(fetchedPost);
           setError(null);
         } catch (err: any) {
-          // Handle specific error messages
           if (err.message === "Post not found.") {
             setError("Post not found.");
           } else {
@@ -65,7 +64,7 @@ const BlogPostPage = ({ params }: { params: { slug: string } }) => {
         <Loader />
       </div>
     );
-  
+
   if (error) {
     return (
       <div className="max-w-screen-md mx-auto p-4">
@@ -76,40 +75,40 @@ const BlogPostPage = ({ params }: { params: { slug: string } }) => {
             onClick={() => router.back()}
             className="text-purple-400 hover:underline"
           >
-            ← Back to Blogs
+            &larr; Back to Blogs
           </button>
         </div>
       </div>
     );
   }
-  
+
   if (!post) {
     return (
       <div className="max-w-screen-md mx-auto p-4">
         <div className="bg-gray-900 border border-gray-700 rounded-lg p-6 text-center">
           <h2 className="text-xl font-semibold text-gray-300 mb-2">Post Not Found</h2>
-          <p className="text-gray-400 mb-4">The blog post you're looking for doesn't exist.</p>
+          <p className="text-gray-400 mb-4">The blog post you&apos;re looking for doesn&apos;t exist.</p>
           <button
             onClick={() => router.back()}
             className="text-purple-400 hover:underline"
           >
-            ← Back to Blogs
+            &larr; Back to Blogs
           </button>
         </div>
       </div>
     );
   }
-  console.log(post);
+
   return (
     <div className="max-w-screen-md mx-auto p-4">
       <h1 className="text-4xl leading-[60px] capitalize text-center font-bold text-purple-800 font-jet-brains">
         {post.title}
       </h1>
-      <div className="w-full flex items-center justify-center font-light">
-        Published: {moment(post.createdAt).fromNow()}
+      <div className="w-full flex items-center justify-center gap-4 font-light">
+        <span>Published: {moment(post.createdAt).fromNow()}</span>
+        <VoteButtons blogId={post.id} />
       </div>
 
-      {/* Categories Section */}
       {post.categories && post.categories.length > 0 && (
         <div className="flex flex-wrap space-x-2 my-4">
           {post.categories.map(({ name, documentId }) => (
@@ -135,8 +134,8 @@ const BlogPostPage = ({ params }: { params: { slug: string } }) => {
       <p className="text-gray-300 leading-[32px] tracking-wide italic mt-2 mb-6">
         {post.description}
       </p>
+      <div className="leading-[40px] max-w-screen-lg prose prose-invert">
       <Markdown
-        className={"leading-[40px] max-w-screen-lg prose prose-invert"}
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw]}
         components={{
@@ -172,12 +171,15 @@ const BlogPostPage = ({ params }: { params: { slug: string } }) => {
       >
         {post.content}
       </Markdown>
+      </div>
       <button
         onClick={() => router.back()}
         className="text-purple-800 mt-4 inline-block hover:underline"
       >
         Back to Blogs
       </button>
+
+      <Comments blogId={post.id} />
     </div>
   );
 };
