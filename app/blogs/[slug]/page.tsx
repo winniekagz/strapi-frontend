@@ -4,26 +4,12 @@ import { useEffect, useState, use } from "react";
 import { getPostBySlug } from "../../../lib/api";
 import { useRouter } from "next/navigation";
 import { BlogPost } from "@/lib/types";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { dracula } from "react-syntax-highlighter/dist/cjs/styles/prism";
-import { FaClipboard } from "react-icons/fa";
 import Loader from "@/components/Loading";
 import moment from "moment";
-import { toast } from "react-hot-toast";
 import Comments from "@/components/Comments";
 import VoteButtons from "@/components/VoteButtons";
+import BlocksRenderer from "@/components/BlocksRenderer";
 
-const handleCopyCode = async (code: string) => {
-  try {
-    await navigator.clipboard.writeText(code);
-    toast.success("Code copied to clipboard!");
-  } catch (err) {
-    console.error("Failed to copy code: ", err);
-  }
-};
 
 const BlogPostPage = ({ params }: { params: Promise<{ slug: string }> }) => {
   const { slug } = use(params);
@@ -45,7 +31,6 @@ const BlogPostPage = ({ params }: { params: Promise<{ slug: string }> }) => {
           } else {
             setError("Error fetching post. Please try again later.");
           }
-          console.error("Error fetching post:", err);
         } finally {
           setLoading(false);
         }
@@ -135,42 +120,17 @@ const BlogPostPage = ({ params }: { params: Promise<{ slug: string }> }) => {
         {post.description}
       </p>
       <div className="leading-[40px] max-w-screen-lg prose prose-invert">
-      <Markdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw]}
-        components={{
-          code({ inline, className, children, ...props }: any) {
-            const match = /language-(\w+)/.exec(className || "");
-            const codeString = String(children).replace(/\n$/, "");
-
-            return !inline && match ? (
-              <div className="relative">
-                <button
-                  onClick={() => handleCopyCode(codeString)}
-                  className="absolute top-2 right-2 bg-gray-700 text-white p-1 rounded-md hover:bg-gray-600"
-                  title="Copy to clipboard"
-                >
-                  <FaClipboard color="#fff" />
-                </button>
-                <SyntaxHighlighter
-                  style={dracula}
-                  PreTag="div"
-                  language={match[1]}
-                  {...props}
-                >
-                  {codeString}
-                </SyntaxHighlighter>
-              </div>
-            ) : (
-              <code className={className} {...props}>
-                {children}
-              </code>
-            );
-          },
-        }}
-      >
-        {post.content}
-      </Markdown>
+        {post.content == null || post.content === "" ? (
+          <div className="text-gray-400 italic">No content</div>
+        ) : Array.isArray(post.content) ? (
+          <BlocksRenderer blocks={post.content} />
+        ) : typeof post.content === "object" && (post.content as { type?: string }).type === "doc" && Array.isArray((post.content as { content?: unknown[] }).content) ? (
+          <BlocksRenderer blocks={(post.content as { content: unknown[] }).content} />
+        ) : typeof post.content === "string" ? (
+          <div className="whitespace-pre-wrap">{post.content}</div>
+        ) : (
+          <div className="text-gray-400 italic">Content format not supported</div>
+        )}
       </div>
       <button
         onClick={() => router.back()}

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:endpoints": "node test-endpoints.js"
   },
   "dependencies": {
     "@strapi/provider-email-sendgrid": "^5.34.0",

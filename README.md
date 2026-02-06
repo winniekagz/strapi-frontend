@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DEV.BLOG
 
-## Getting Started
+Next.js blog app with Strapi (headless CMS): posts, comments, votes, auth, and editor-only write page.
 
-First, run the development server:
+## Run the app
 
+**Strapi (backend)** – from your Strapi project root:
 ```bash
+npm run develop
+```
+Runs at `http://localhost:1337`.
+
+**Next.js (frontend)** – from this project root:
+```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+Runs at `http://localhost:3000`.
+
+## Environment
+
+Create `.env.local` in this project:
+
+```
+NEXT_PUBLIC_STRAPI_URL=http://localhost:1337
+NEXT_PUBLIC_PAGE_LIMIT=9
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Restart the Next.js dev server after changing env.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Strapi setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Permissions and content types must be configured in Strapi so the app can log in, create posts, and load comments/votes.
 
-## Learn More
+See **[STRAPI_SETUP.md](./STRAPI_SETUP.md)** for:
 
-To learn more about Next.js, take a look at the following resources:
+- Roles & permissions (Public, Authenticated)
+- Why votes/comments return 403
+- Content/categories/cover not saving
+- Common errors and quick checks
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Main routes
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Route        | Description                    |
+|-------------|--------------------------------|
+| `/`         | Blog list (paginated, search)  |
+| `/blogs/[slug]` | Single post, comments, votes |
+| `/write`    | Create post (Editor/Admin only) |
+| `/login`    | Sign in                        |

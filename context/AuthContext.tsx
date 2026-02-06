@@ -30,14 +30,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const restoreSession = async () => {
       try {
-        const res = await fetch("/api/auth/me");
+        const res = await fetch("/api/auth/me", { credentials: "include" });
         if (res.ok) {
           const data = await res.json();
           setUser(data.user);
           setToken(data.token);
+        } else {
+          setUser(null);
+          setToken(null);
         }
       } catch {
-        // no session
+        setUser(null);
+        setToken(null);
       } finally {
         setLoading(false);
       }
@@ -50,14 +54,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ identifier: email, password }),
+      credentials: "include",
     });
     if (!res.ok) {
-      const err = await res.json();
+      const err = await res.json().catch(() => ({ error: "Login failed" }));
       throw new Error(err.error || "Login failed");
     }
     const data = await res.json();
     setUser(data.user);
     setToken(data.token);
+    try {
+      const meRes = await fetch("/api/auth/me", { credentials: "include" });
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        setUser(meData.user);
+        setToken(meData.token);
+      }
+    } catch {
+      // Keep login response data
+    }
   }, []);
 
   const register = useCallback(async (username: string, email: string, password: string) => {
@@ -71,8 +86,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       throw new Error(err.error || "Registration failed");
     }
     const data = await res.json();
-    setUser(data.user);
-    setToken(data.token);
+    
+    // Cookie is set by server, verify session
+    const meRes = await fetch("/api/auth/me", {
+      credentials: 'include',
+    });
+    
+    if (meRes.ok) {
+      const meData = await meRes.json();
+      setUser(meData.user);
+      setToken(meData.token);
+    } else {
+      setUser(data.user);
+      setToken(data.token);
+    }
   }, []);
 
   const logout = useCallback(async () => {

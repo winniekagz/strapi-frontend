@@ -21,10 +21,11 @@ export interface Category {
 
 export interface BlogPost {
   id: number;
+  documentId?: string; // Strapi documentId for URL routing when slug is null
   title: string;
-  slug: string;
+  slug: string | null; // Can be null if not set in Strapi (auto-generated from title if null)
   description: string;
-  content: string; // rich markdown text
+  content: string | any[]; // Can be markdown string or Strapi rich text array
   createdAt: string; // ISO date string
   cover: ImageData; // Assuming this is the structure of your featured image
   author: Author; // The author of the blog post
@@ -35,7 +36,8 @@ export interface UserBlogPostData {
   title: string;
   slug: string;
   description: string;
-  content: string; //  rich markdown text
+  content: string; // rich markdown text (converted to Blocks in api)
+  categories?: string[]; // category documentIds for Strapi v5 relation
 }
 
 // Example response structure when fetching posts

@@ -6,9 +6,11 @@ import { FaArrowLeft } from "react-icons/fa";
 import slugify from "react-slugify";
 import MarkdownEditor from "@uiw/react-markdown-editor";
 import Image from "next/image";
-import { createPost, uploadImage } from "@/lib/api";
+import { createPost, uploadImage, getAllCategories } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { useAuth } from "@/context/AuthContext";
+
+type CategoryOption = { id: number; documentId: string; name: string };
 
 const WritePost = () => {
   const [markdownContent, setMarkdownContent] = useState("");
@@ -16,19 +18,28 @@ const WritePost = () => {
   const [description, setDescription] = useState("");
   const [coverImage, setCoverImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { user, token, loading } = useAuth();
 
-  const isEditor =
-    user?.role?.type === "editor" || user?.role?.type === "admin";
-
   useEffect(() => {
-    if (!loading && !user) {
-      router.push("/login");
-    }
-  }, [loading, user, router]);
+    getAllCategories()
+      .then(setCategories)
+      .catch(() => {});
+  }, []);
+
+  // Role is read from user.role (name or type). Check both and use case-insensitive match
+  const roleName = String(user?.role?.name ?? "").toLowerCase();
+  const roleType = String(user?.role?.type ?? "").toLowerCase();
+  const isEditor =
+    roleName === "editor" ||
+    roleName === "admin" ||
+    roleType === "editor" ||
+    roleType === "admin" ||
+    roleType === "wditor"; // Strapi sometimes has typo "wditor" for editor
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -48,19 +59,21 @@ const WritePost = () => {
         description,
         slug: postSlug,
         content: markdownContent,
+        ...(selectedCategoryIds.length > 0 && { categories: selectedCategoryIds }),
       };
 
-      const postResponse = await createPost(postData, token || undefined);
-      const postId = postResponse.id;
+      const postResponse = await createPost(postData, token || undefined) as { id?: number; documentId?: string };
+      const postId = postResponse?.id;
+      const postDocumentId = postResponse?.documentId;
 
-      if (coverImage) {
+      if (coverImage && postId != null) {
         await uploadImage(coverImage, postId, token || undefined);
       }
 
-      router.push(`/blogs/${postSlug}`);
+      const routeParam = postDocumentId || postSlug || postId;
+      router.push(`/blogs/${routeParam}`);
       toast.success("Post created successfully");
-    } catch (error) {
-      console.error("Failed to create post:", error);
+    } catch {
       setError("Failed to create post. Please try again.");
       toast.error("Failed to create post. Please try again.");
     } finally {
@@ -118,7 +131,27 @@ const WritePost = () => {
           className="w-full p-2 font-jet-brains bg-[#161b22] font-semibold text-gray-100 border-b border-gray-600 focus:border-purple-500 focus:outline-none placeholder-gray-400"
         />
       </div>
+      <div className="mb-4">
+        <label className="block text-gray-300 text-sm font-medium mb-2">Category</label>
+        <select
+          multiple
+          value={selectedCategoryIds}
+          onChange={(e) => {
+            const opts = Array.from(e.target.selectedOptions, (o) => o.value);
+            setSelectedCategoryIds(opts);
+          }}
+          className="w-full p-2 font-jet-brains bg-[#161b22] text-gray-100 border border-gray-600 focus:border-purple-500 focus:outline-none"
+        >
+          {categories.map((cat) => (
+            <option key={cat.documentId} value={cat.documentId}>
+              {cat.name}
+            </option>
+          ))}
+        </select>
+        <p className="text-gray-500 text-xs mt-1">Hold Ctrl/Cmd to select multiple</p>
+      </div>
       <div className="mb-6">
+        <label className="block text-gray-300 text-sm font-medium mb-2">Cover image</label>
         <input
           type="file"
           accept="image/*"

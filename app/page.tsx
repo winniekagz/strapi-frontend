@@ -55,25 +55,31 @@ function HomeContent() {
     setLoading(true);
   };
 
-  return (
-    <div className="max-w-screen-lg mx-auto p-4">
-      {loading && (
-        <div className="w-full flex items-center justify-center">
-          <Loader />
-        </div>
-      )}
-      {error && <p>{error}</p>}
+return (
+  <div className="max-w-screen-lg mx-auto p-4">
+    {loading && (
+      <div className="w-full flex items-center justify-center">
+        <Loader />
+      </div>
+    )}
 
-      {!loading && !error && (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {posts.length > 0 ? (
-              posts.map((post) => (
+    {error && <p>{error}</p>}
+
+    {!loading && !error && (
+      <>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {posts.length > 0 ? (
+            posts.map((post) => {
+              // CRITICAL: Always use documentId for routing (most reliable in Strapi)
+              // Fallback order: documentId → slug → id (as string)
+              const routeParam = post.documentId || post.slug || String(post.id);
+
+              return (
                 <div
                   key={post.id}
                   className="cursor-pointer bg-gray-900 rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-shadow"
                 >
-                  <Link href={`/blogs/${post.slug}`} className="block">
+                  <Link href={`/blogs/${routeParam}`} className="block">
                     {post.cover?.url && (
                       <div className="relative h-36 w-full">
                         <img
@@ -83,13 +89,16 @@ function HomeContent() {
                         />
                       </div>
                     )}
+
                     <div className="p-4">
                       <h2 className="text-lg font-semibold font-jet-brains text-white line-clamp-2">
                         {post.title}
                       </h2>
+
                       <p className="text-gray-400 mt-2 text-sm leading-6 line-clamp-3">
                         {post.description}
                       </p>
+
                       <div className="flex items-center justify-between mt-4">
                         <p className="text-purple-400 text-sm inline-block font-medium hover:underline">
                           Read More
@@ -99,19 +108,20 @@ function HomeContent() {
                     </div>
                   </Link>
                 </div>
-              ))
-            ) : (
-              <p className="text-gray-400">No posts available at the moment.</p>
-            )}
-          </div>
+              );
+            })
+          ) : (
+            <p className="text-gray-400">No posts available at the moment.</p>
+          )}
+        </div>
 
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-          />
-        </>
-      )}
-    </div>
-  );
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={handlePageChange}
+        />
+      </>
+    )}
+  </div>
+);
 }

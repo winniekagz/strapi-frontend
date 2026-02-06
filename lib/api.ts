@@ -1,22 +1,29 @@
 // lib/api.ts
 import axios, { AxiosInstance } from "axios";
+import slugify from "react-slugify";
 import { UserBlogPostData, BlogPost, Comment, Vote } from "./types";
 
 export const api: AxiosInstance = axios.create({
   baseURL: `${process.env.NEXT_PUBLIC_STRAPI_URL}`,
 });
 
-// Helper function to normalize Strapi v4 response structure
+// Normalize Strapi v4/v5 post response (flat or attributes wrapper)
 const normalizePost = (post: any): BlogPost => {
-  // If post has attributes wrapper (Strapi v4 structure), flatten it
-  if (post.attributes) {
-    return {
-      id: post.id,
-      ...post.attributes,
-    } as BlogPost;
+  let normalized: any = post.attributes
+    ? { id: post.id, documentId: post.documentId, ...post.attributes }
+    : { ...post, documentId: post.documentId };
+
+  if (Array.isArray(normalized.cover) && normalized.cover.length > 0) {
+    normalized.cover = normalized.cover[0];
   }
-  // If already flattened, return as is
-  return post as BlogPost;
+  if (!normalized.slug && normalized.title) {
+    normalized.slug = slugify(normalized.title);
+  }
+  const rawContent = normalized.content;
+  if (rawContent != null && typeof rawContent === "object" && !Array.isArray(rawContent) && rawContent.type === "doc" && Array.isArray(rawContent.content)) {
+    normalized.content = rawContent.content;
+  }
+  return normalized as BlogPost;
 };
 
 export const getAllPosts = async (
@@ -24,69 +31,70 @@ export const getAllPosts = async (
   searchQuery: string = ""
 ) => {
   try {
-    // If search query exists, filter posts based on title
-    const searchFilter = searchQuery
-      ? `&filters[title][$containsi]=${searchQuery}`
-      : ""; // Search filter with the title
-    // Fetch posts with pagination and populate the required fields
+    const searchFilter = searchQuery ? `&filters[title][$containsi]=${searchQuery}` : "";
     const response = await api.get(
       `api/blogs?populate=*&pagination[page]=${page}&pagination[pageSize]=${process.env.NEXT_PUBLIC_PAGE_LIMIT}${searchFilter}`
     );
-    
-    // Normalize posts to ensure consistent structure
     const normalizedPosts = (response.data.data || []).map(normalizePost);
-    
     return {
       posts: normalizedPosts,
-      pagination: response.data.meta?.pagination || { page: 1, pageCount: 1, pageSize: 10, total: 0 }, // Return data and include pagination data
+      pagination: response.data.meta?.pagination || { page: 1, pageCount: 1, pageSize: 10, total: 0 },
     };
   } catch (error) {
-    console.error("Error fetching blogs:", error);
-    throw new Error("Server error"); // Error handling
+    throw new Error("Server error");
   }
 };
 
-// Get post by slug
-export const getPostBySlug = async (slug: string) => {
+// Get post by documentId, slug, or ID (documentId preferred for Strapi v5)
+export const getPostBySlug = async (slugOrId: string) => {
   try {
-    const response = await api.get(
-      `api/blogs?filters[slug][$eq]=${slug}&populate=*`
-    ); 
-    if (response.data.data && response.data.data.length > 0) {
-      // Normalize the post to ensure consistent structure
-      return normalizePost(response.data.data[0]);
+    if (slugOrId !== "null" && /^[a-z0-9]+$/.test(slugOrId) && !/^\d+$/.test(slugOrId)) {
+      const res = await api.get(`api/blogs?filters[documentId][$eq]=${slugOrId}&populate=*`);
+      if (res.data?.data?.length > 0) return normalizePost(res.data.data[0]);
+    }
+    if (slugOrId !== "null" && !/^\d+$/.test(slugOrId)) {
+      const res = await api.get(`api/blogs?filters[slug][$eq]=${slugOrId}&populate=*`);
+      if (res.data?.data?.length > 0) return normalizePost(res.data.data[0]);
+    }
+    if (/^\d+$/.test(slugOrId)) {
+      const res = await api.get(`api/blogs?filters[id][$eq]=${slugOrId}&populate=*`);
+      if (res.data?.data?.length > 0) return normalizePost(res.data.data[0]);
     }
     throw new Error("Post not found.");
   } catch (error: any) {
-    console.error("Error fetching post:", error);
-    // If it's a "Post not found" error, re-throw it
-    if (error.message === "Post not found.") {
-      throw error;
-    }
+    if (error.message === "Post not found.") throw error;
     throw new Error("Server error");
   }
 };
 
-// Get all posts categories
-export const getAllCategories = async () => {
+// Get all categories (normalized for Strapi v4/v5: { id, documentId, name })
+export const getAllCategories = async (): Promise<{ id: number; documentId: string; name: string }[]> => {
   try {
-    const response = await api.get("api/categories"); // Route to fetch Categories data
-    return response.data.data; // Return all categories
-  } catch (error) {
-    console.error("Error fetching post:", error);
+    const response = await api.get("api/categories");
+    const raw = response.data?.data ?? response.data ?? [];
+    const list = Array.isArray(raw) ? raw : [raw];
+    return list.map((c: any) => {
+      const attrs = c?.attributes ?? c;
+      return {
+        id: c?.id ?? attrs?.id,
+        documentId: c?.documentId ?? attrs?.documentId ?? String(c?.id ?? attrs?.id),
+        name: attrs?.name ?? c?.name ?? "",
+      };
+    });
+  } catch {
     throw new Error("Server error");
   }
 };
 
-// Comments
-export const getCommentsByBlog = async (blogId: number): Promise<Comment[]> => {
+export const getCommentsByBlog = async (blogId: number, token?: string | null): Promise<Comment[]> => {
   try {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
     const response = await api.get(
-      `api/comments?filters[blog][id][$eq]=${blogId}&filters[isApproved][$eq]=true&populate=user&sort=createdAt:desc`
+      `api/comments?filters[blog][id][$eq]=${blogId}&populate=author&sort=createdAt:desc`,
+      { headers }
     );
     return response.data.data || [];
-  } catch (error) {
-    console.error("Error fetching comments:", error);
+  } catch {
     return [];
   }
 };
@@ -100,15 +108,26 @@ export const postComment = async (blogId: number, content: string, token: string
   return response.data.data;
 };
 
-// Votes
-export const getVotesByBlog = async (blogId: number): Promise<Vote[]> => {
+// Votes – normalize Strapi v4 (flat) vs v5 (attributes) so .value is always available
+const normalizeVote = (raw: any): { id: number; value: 1 | -1 } => {
+  const attrs = raw?.attributes ?? raw;
+  const id = raw?.id ?? attrs?.id;
+  const value = attrs?.value ?? raw?.value;
+  return { id, value: value === -1 ? -1 : 1 };
+};
+
+// Votes (pass token when user is logged in so Strapi uses Authenticated role; otherwise Public)
+export const getVotesByBlog = async (blogId: number, token?: string | null): Promise<{ id: number; value: 1 | -1 }[]> => {
   try {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
     const response = await api.get(
-      `api/votes?filters[blog][id][$eq]=${blogId}`
+      `api/votes?filters[blog][id][$eq]=${blogId}`,
+      { headers }
     );
-    return response.data.data || [];
-  } catch (error) {
-    console.error("Error fetching votes:", error);
+    const raw = response.data?.data ?? response.data ?? [];
+    const list = Array.isArray(raw) ? raw : [];
+    return list.map(normalizeVote);
+  } catch {
     return [];
   }
 };
@@ -116,11 +135,13 @@ export const getVotesByBlog = async (blogId: number): Promise<Vote[]> => {
 export const getUserVote = async (blogId: number, userId: number, token: string) => {
   try {
     const response = await api.get(
-      `api/votes?filters[blog][id][$eq]=${blogId}&filters[user][id][$eq]=${userId}`,
+      `api/votes?filters[blog][id][$eq]=${blogId}&filters[users_permissions_user][id][$eq]=${userId}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
-    const votes = response.data.data;
-    return votes && votes.length > 0 ? { id: votes[0].id, value: votes[0].value } : null;
+    const raw = response.data?.data ?? response.data ?? [];
+    const votes = Array.isArray(raw) ? raw : [];
+    if (votes.length === 0) return null;
+    return normalizeVote(votes[0]);
   } catch {
     return null;
   }
@@ -132,7 +153,8 @@ export const castVote = async (blogId: number, value: 1 | -1, token: string) => 
     { data: { blog: blogId, value } },
     { headers: { Authorization: `Bearer ${token}` } }
   );
-  return response.data.data;
+  const data = response.data?.data ?? response.data;
+  return normalizeVote(data);
 };
 
 export const updateVote = async (voteId: number, value: 1 | -1, token: string) => {
@@ -141,7 +163,8 @@ export const updateVote = async (voteId: number, value: 1 | -1, token: string) =
     { data: { value } },
     { headers: { Authorization: `Bearer ${token}` } }
   );
-  return response.data.data;
+  const data = response.data?.data ?? response.data;
+  return normalizeVote(data);
 };
 
 export const deleteVote = async (voteId: number, token: string) => {
@@ -165,21 +188,61 @@ export const uploadImage = async (image: File, refId: number, token?: string) =>
     const uploadedImage = response.data[0];
     return uploadedImage; 
   } catch (err) {
-    console.error("Error uploading image:", err);
     throw err;
   }
 };
 
-// Create a blog post and handle all fields
+// Convert plain/markdown string to Strapi Rich text (Blocks) so content is not stored as null
+const stringToStrapiBlocks = (str: string): { type: string; children: { type: string; text: string }[] }[] => {
+  if (str == null || typeof str !== "string") return [];
+  return str
+    .split(/\n\n+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((paragraph) => ({
+      type: "paragraph",
+      children: [{ type: "text", text: paragraph.replace(/\n/g, " ") }],
+    }));
+};
+
 export const createPost = async (postData: UserBlogPostData, token?: string) => {
   try {
-    const reqData = { data: { ...postData } };
-    const headers: Record<string, string> = {};
-    if (token) headers.Authorization = `Bearer ${token}`;
+    // Strapi Blog: content = Blocks array; categories = relation by documentId (v5)
+    const payload: Record<string, unknown> = {
+      title: postData.title,
+      description: postData.description,
+      slug: postData.slug,
+    };
+    // Rich text (Blocks) – array of blocks so Strapi doesn't store null
+    payload.content =
+      typeof postData.content === "string"
+        ? stringToStrapiBlocks(postData.content)
+        : (postData as any).content;
+    // Categories: Strapi v5 expects documentIds, e.g. { set: ["docId1", ...] } or array
+    if (postData.categories?.length) {
+      payload.categories = { set: postData.categories };
+    }
+    const reqData = { data: payload };
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
     const response = await api.post("api/blogs", reqData, { headers });
-    return response.data.data;
-  } catch (error) {
-    console.error("Error creating post:", error);
-    throw new Error("Failed to create post");
+    return response.data?.data ?? response.data;
+  } catch (error: any) {
+    const status = error.response?.status;
+    const errorData = error.response?.data;
+    if (status === 401) {
+      throw new Error("Unauthorized - Please log in to create posts");
+    }
+    if (status === 403) {
+      throw new Error("Forbidden - You don't have permission to create posts. Check your role in Strapi.");
+    }
+    if (status === 400) {
+      throw new Error(`Bad Request: ${errorData?.error?.message || JSON.stringify(errorData)}`);
+    }
+    throw new Error(error.message || "Failed to create post");
   }
-};
+}

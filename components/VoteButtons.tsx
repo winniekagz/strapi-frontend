@@ -16,13 +16,16 @@ const VoteButtons = ({ blogId }: VoteButtonsProps) => {
 
   const fetchVotes = useCallback(async () => {
     try {
-      const votes = await getVotesByBlog(blogId);
-      const total = votes.reduce((sum: number, v: any) => sum + v.value, 0);
+      const votes = await getVotesByBlog(blogId, token ?? undefined);
+      const total = votes.reduce(
+        (sum: number, v: { id: number; value: 1 | -1 }) => sum + (v?.value ?? 0),
+        0
+      );
       setScore(total);
     } catch {
       // ignore
     }
-  }, [blogId]);
+  }, [blogId, token]);
 
   const fetchUserVote = useCallback(async () => {
     if (!user || !token) return;

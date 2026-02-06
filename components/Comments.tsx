@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { getCommentsByBlog, postComment } from "@/lib/api";
 import { Comment } from "@/lib/types";
@@ -11,23 +11,51 @@ interface CommentsProps {
   blogId: number;
 }
 
+// Normalize comment from Strapi (handles flat, attributes, and author vs user)
+function normalizeComment(c: any): Comment {
+  if (!c) return c;
+  const attrs = c.attributes ?? c;
+  const authorData = attrs.author?.data?.attributes ?? attrs.author ?? attrs.user?.data?.attributes ?? attrs.user;
+  const user = authorData && typeof authorData === "object"
+    ? {
+        id: authorData.id ?? (attrs.author?.data?.id ?? attrs.user?.data?.id),
+        username: authorData.username ?? authorData.name ?? "User",
+        email: authorData.email ?? "",
+        role: authorData.role ?? { name: "User", type: "authenticated" },
+      }
+    : { id: 0, username: "User", email: "", role: { name: "User", type: "authenticated" } };
+  return {
+    id: c.id ?? attrs.id,
+    content: attrs.content ?? c.content,
+    blog: attrs.blog ?? c.blog,
+    user,
+    isApproved: attrs.isApproved ?? c.isApproved ?? true,
+    createdAt: attrs.createdAt ?? c.createdAt,
+  };
+}
+
 const Comments = ({ blogId }: CommentsProps) => {
-  const { user, token } = useAuth();
+  const { user, token, loading } = useAuth();
   const [comments, setComments] = useState<Comment[]>([]);
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const fetchComments = useCallback(async () => {
+    try {
+      setFetchError(null);
+      const data = await getCommentsByBlog(blogId, token ?? undefined);
+      const list = Array.isArray(data) ? data : (data as any)?.data ?? [];
+      setComments(list.map(normalizeComment));
+    } catch (e) {
+      setFetchError("Could not load comments.");
+      setComments([]);
+    }
+  }, [blogId, token]);
 
   useEffect(() => {
-    const fetchComments = async () => {
-      try {
-        const data = await getCommentsByBlog(blogId);
-        setComments(data);
-      } catch {
-        // silently fail
-      }
-    };
     fetchComments();
-  }, [blogId]);
+  }, [fetchComments]);
 
   const handleSubmit = async () => {
     if (!content.trim() || !token) return;
@@ -36,6 +64,7 @@ const Comments = ({ blogId }: CommentsProps) => {
       await postComment(blogId, content, token);
       setContent("");
       toast.success("Your comment is awaiting moderation");
+      await fetchComments();
     } catch {
       toast.error("Failed to post comment");
     } finally {
@@ -44,30 +73,34 @@ const Comments = ({ blogId }: CommentsProps) => {
   };
 
   return (
-    <div className="mt-10 border-t border-gray-700 pt-6">
+    <section className="mt-10 border-t border-gray-700 pt-6" aria-label="Comments">
       <h3 className="text-xl font-bold text-white mb-4 font-jet-brains">Comments</h3>
 
-      {comments.length === 0 && (
-        <p className="text-gray-400 mb-4">No comments yet.</p>
+      {fetchError && (
+        <p className="text-amber-500 text-sm mb-4">{fetchError}</p>
+      )}
+
+      {comments.length === 0 && !fetchError && (
+        <p className="text-gray-400 mb-4">No comments yet. Be the first to comment.</p>
       )}
 
       <div className="space-y-4 mb-6">
         {comments.map((comment) => (
-          <div key={comment.id} className="bg-gray-800 rounded-md p-4">
+          <article key={comment.id} className="bg-gray-800 rounded-lg p-4 border border-gray-700/50">
             <div className="flex justify-between items-center mb-2">
               <span className="text-purple-400 text-sm font-medium">
-                {comment.user?.username || "Anonymous"}
+                {comment.user?.username || comment.user?.email || "Anonymous"}
               </span>
-              <span className="text-gray-500 text-xs">
+              <time className="text-gray-500 text-xs" dateTime={comment.createdAt}>
                 {moment(comment.createdAt).fromNow()}
-              </span>
+              </time>
             </div>
-            <p className="text-gray-300 text-sm">{comment.content}</p>
-          </div>
+            <p className="text-gray-300 text-sm whitespace-pre-wrap">{comment.content}</p>
+          </article>
         ))}
       </div>
 
-      {user ? (
+      {!loading && user && token ? (
         <div className="space-y-3">
           <textarea
             value={content}
@@ -91,7 +124,7 @@ const Comments = ({ blogId }: CommentsProps) => {
           </Link>
         </p>
       )}
-    </div>
+    </section>
   );
 };
 

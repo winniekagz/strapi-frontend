@@ -17,11 +17,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Fetch user with role populated
-    const userRes = await fetch(`${process.env.NEXT_PUBLIC_STRAPI_URL}/api/users/me?populate=role`, {
-      headers: { Authorization: `Bearer ${data.jwt}` },
-    });
-    const user = await userRes.json();
+    let user = data.user;
+    try {
+      const userRes = await fetch(`${process.env.NEXT_PUBLIC_STRAPI_URL}/api/users/me?populate=role`, {
+        headers: { Authorization: `Bearer ${data.jwt}` },
+      });
+      if (userRes.ok) {
+        const meUser = await userRes.json();
+        user = meUser;
+      } else {
+        if (!user.role) {
+          user.role = data.user?.role || { type: 'authenticated', name: 'Authenticated' };
+        }
+      }
+    } catch {
+      if (!user.role) {
+        user.role = data.user?.role || { type: 'authenticated', name: 'Authenticated' };
+      }
+    }
 
     const response = NextResponse.json({ user, token: data.jwt });
     response.cookies.set("auth-token", data.jwt, {
@@ -29,9 +42,13 @@ export async function POST(req: NextRequest) {
       sameSite: "lax",
       maxAge: 60 * 60 * 24,
       path: "/",
+      secure: process.env.NODE_ENV === "production",
     });
     return response;
-  } catch {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: "Internal server error", details: error.message },
+      { status: 500 }
+    );
   }
 }
